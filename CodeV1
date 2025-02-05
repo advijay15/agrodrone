@@ -1,0 +1,131 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_AM2320.h>
+#include <Adafruit_LTR329_LTR303.h>
+#include <SoftwareSerial.h>
+
+// Initialize I2C sensors
+Adafruit_AM2320 am2320 = Adafruit_AM2320();
+Adafruit_LTR329 ltr329 = Adafruit_LTR329();
+
+// Define SoftwareSerial pins for Bluetooth communication
+SoftwareSerial bluetooth(10, 11); // RX, TX
+
+// Electromagnet control pin
+#define ELECTROMAGNET_PIN 3
+
+void setup() {
+  // Initialize Serial Monitor
+  Serial.begin(9600);
+  bluetooth.begin(9600); // Initialize Bluetooth module
+  Serial.println("Starting Combined Sensor Readings...");
+  bluetooth.println("Starting Combined Sensor Readings...");
+
+  // Initialize AM2320 (Temperature and Humidity)
+  if (!am2320.begin()) {
+    Serial.println("AM2320 sensor not found. Check wiring.");
+    bluetooth.println("AM2320 sensor not found. Check wiring.");
+    while (1) delay(10);
+  } else {
+    Serial.println("AM2320 initialized.");
+    bluetooth.println("AM2320 initialized.");
+  }
+
+  // Initialize LTR-329 (Light Sensor)
+  if (!ltr329.begin()) {
+    Serial.println("LTR-329 sensor not found. Check wiring.");
+    bluetooth.println("LTR-329 sensor not found. Check wiring.");
+    while (1) delay(10);
+  } else {
+    Serial.println("LTR-329 initialized.");
+    bluetooth.println("LTR-329 initialized.");
+  }
+
+  // Configure LTR-329 (optional)
+  ltr329.setGain(LTR3XX_GAIN_4); // Set gain (1x, 2x, 4x, or 8x)
+  ltr329.setIntegrationTime(LTR3XX_INTEGTIME_100); // Set integration time
+
+  // Initialize electromagnet control pin
+  pinMode(ELECTROMAGNET_PIN, OUTPUT);
+  digitalWrite(ELECTROMAGNET_PIN, LOW); // Start with electromagnet OFF
+}
+
+void loop() {
+  // Read BLE Commands
+  if (bluetooth.available()) {
+    char command = bluetooth.read();
+    if (command == '1') {
+      digitalWrite(ELECTROMAGNET_PIN, HIGH); // Turn electromagnet ON
+      Serial.println("Electromagnet ON");
+      bluetooth.println("Electromagnet ON");
+    } else if (command == '0') {
+      digitalWrite(ELECTROMAGNET_PIN, LOW); // Turn electromagnet OFF
+      Serial.println("Electromagnet OFF");
+      bluetooth.println("Electromagnet OFF");
+    }
+  }
+
+  // Read Analog Values
+  int soilMoisture = analogRead(A2); // Soil moisture sensor on A2
+  int airQuality = analogRead(A5);  // Air quality sensor on A5
+
+  // Read AM2320 Data
+  float temperature = am2320.readTemperature();
+  float humidity = am2320.readHumidity();
+
+  // Read LTR-329 Data
+  uint16_t visible_plus_ir, infrared;
+  if (ltr329.newDataAvailable()) {
+    bool valid = ltr329.readBothChannels(visible_plus_ir, infrared);
+    if (valid) {
+      Serial.print("Light - Visible + IR: ");
+      Serial.println(visible_plus_ir);
+      bluetooth.print("Light - Visible + IR: ");
+      bluetooth.println(visible_plus_ir);
+
+      Serial.print("Light - IR: ");
+      Serial.println(infrared);
+      bluetooth.print("Light - IR: ");
+      bluetooth.println(infrared);
+    } else {
+      Serial.println("Failed to read from LTR-329.");
+      bluetooth.println("Failed to read from LTR-329.");
+    }
+  }
+
+  // Display Analog Readings
+  Serial.print("Soil Moisture (A2): ");
+  Serial.println(soilMoisture);
+  bluetooth.print("Soil Moisture (A2): ");
+  bluetooth.println(soilMoisture);
+
+  Serial.print("Air Quality (A5): ");
+  Serial.println(airQuality);
+  bluetooth.print("Air Quality (A5): ");
+  bluetooth.println(airQuality);
+
+  // Display AM2320 Readings
+  if (!isnan(temperature) && !isnan(humidity)) {
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.println(" °C");
+    bluetooth.print("Temperature: ");
+    bluetooth.print(temperature);
+    bluetooth.println(" °C");
+
+    Serial.print("Humidity: ");
+    Serial.print(humidity);
+    Serial.println(" %");
+    bluetooth.print("Humidity: ");
+    bluetooth.print(humidity);
+    bluetooth.println(" %");
+  } else {
+    Serial.println("Failed to read from AM2320.");
+    bluetooth.println("Failed to read from AM2320.");
+  }
+
+  Serial.println("-----------------------------------");
+  bluetooth.println("-----------------------------------");
+
+  delay(2000); // Wait 2 seconds
+}
